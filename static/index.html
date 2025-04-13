@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>YouTube Video Summarizer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        secondary: '#1e293b',
+                        accent: '#3b82f6',
+                        dark: '#0f172a',
+                        light: '#f8fafc'
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s infinite',
+                    },
+                    typography: {
+                        DEFAULT: {
+                            css: {
+                                color: '#f8fafc',
+                                maxWidth: 'none',
+                                ul: {
+                                    listStyleType: 'disc',
+                                    marginTop: '1em',
+                                    marginBottom: '1em',
+                                    paddingLeft: '1.5em',
+                                },
+                                ol: {
+                                    listStyleType: 'decimal',
+                                    marginTop: '1em',
+                                    marginBottom: '1em',
+                                    paddingLeft: '1.5em',
+                                },
+                                li: {
+                                    marginTop: '0.25em',
+                                    marginBottom: '0.25em',
+                                },
+                                'ul > li': {
+                                    position: 'relative',
+                                    paddingLeft: '0.375em',
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/template/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen">
+    <div class="flex flex-col md:flex-row relative">
+        <main class="flex-1 p-4 md:p-6 lg:p-8 transition-all duration-300 max-w-[1600px] mx-auto">
+            <header class="mb-8 text-center">
+                <h1 class="text-3xl md:text-4xl lg:text-5xl font-bold text-indigo-400 mb-2 animate-pulse-slow">YouTube
+                    Video Summarizer</h1>
+                <p class="text-gray-300 md:text-lg max-w-2xl mx-auto">
+                    Enter a YouTube URL to fetch its details &amp; get a concise summary powered by AI.
+                </p>
+            </header>
+
+            <div
+                class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-6 border border-gray-700 transform transition-all hover:shadow-xl">
+                <form id="videoForm" class="space-y-4" aria-label="Video URL submission form">
+                    <label for="youtubeUrl" class="block font-semibold text-gray-300 text-lg">
+                        YouTube Video URL:
+                    </label>
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <input type="url" id="youtubeUrl" name="youtube_url"
+                            placeholder="https://www.youtube.com/watch?v=..." required
+                            class="w-full p-3 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-700 text-light text-base shadow-inner" />
+                        <button type="submit" id="submitBtn"
+                            class="w-full md:w-auto bg-indigo-500 text-white px-6 py-3 rounded-lg hover:bg-indigo-600 transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50">
+                            <span>Get Summary</span>
+                        </button>
+                    </div>
+                    <div id="errorContainer"
+                        class="hidden mt-3 p-3 bg-red-900/50 text-red-200 rounded-lg border border-red-700"
+                        role="alert"></div>
+                    <div id="loadingIndicator" class="text-sm text-indigo-400 mt-2 hidden flex items-center gap-2"
+                        role="status">
+                        <svg class="animate-spin h-5 w-5 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none"
+                            viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                        <span id="loadingText">Processing, please wait...</span>
+                    </div>
+                </form>
+            </div>
+
+            <div id="videoData"
+                class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-6 hidden space-y-4 border border-gray-700">
+                <h2 class="text-2xl font-bold text-green-400 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Video Data
+                </h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                        <p class="mb-2">
+                            <strong class="font-semibold text-gray-300">Title:</strong>
+                            <span id="videoTitle" class="ml-2"></span>
+                        </p>
+                        <p class="mb-2">
+                            <strong class="font-semibold text-gray-300">Description:</strong>
+                            <span id="videoDescription" class="ml-2 italic"></span>
+                        </p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-300 mb-2">Transcript:</p>
+                        <div id="videoTranscript"
+                            class="max-h-64 overflow-y-auto bg-gray-700 p-4 rounded-lg border border-gray-600 text-sm shadow-inner">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- YouTube Player Section -->
+            <div id="playerSection" class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-6 hidden border border-gray-700">
+                <h2 class="text-2xl font-bold text-blue-400 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Video Player
+                </h2>
+                <div class="aspect-w-16 aspect-h-9 bg-black rounded-lg overflow-hidden">
+                    <div id="youtubePlayer" class="w-full h-full min-h-[300px]"></div>
+                </div>
+            </div>
+
+            <div id="videoSummary"
+                class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg mb-6 hidden border border-gray-700 transform transition-all">
+                <h2 class="text-2xl font-bold text-purple-400 mb-4 flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Video Summary
+                </h2>
+                <div id="summaryContent"
+                    class="markdown-output prose prose-invert prose-ul:list-disc prose-ol:list-decimal max-w-none leading-relaxed text-gray-100 p-4 bg-gray-700 rounded-lg shadow-inner" 
+                    style="--tw-prose-invert-bullets: #94a3b8; --tw-prose-invert-counters: #94a3b8;">
+                </div>
+            </div>
+
+            <button id="toggleSidebar"
+                class="fixed bottom-6 right-6 md:hidden bg-indigo-500 text-white p-4 rounded-full hover:bg-indigo-600 transition-all shadow-lg focus:outline-none z-10 flex items-center justify-center"
+                aria-controls="sidebar" aria-expanded="false">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+            </button>
+
+            <button id="toggleSidebarDesktop"
+                class="hidden md:flex mt-4 bg-indigo-500 text-white px-6 py-3 rounded-lg hover:bg-indigo-600 transition-all shadow-lg focus:outline-none items-center justify-center gap-2"
+                aria-controls="sidebar" aria-expanded="false">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                <span>Ask Follow-Up Questions</span>
+            </button>
+        </main>
+
+        <aside id="sidebar"
+            class="sidebar bg-gray-800 p-6 border-l border-gray-700 fixed top-0 right-0 h-full overflow-y-auto sidebar-closed z-20 shadow-2xl"
+            role="dialog" aria-modal="true" aria-labelledby="followUpHeading" style="width: 350px;">
+            <div id="dragHandle"
+                class="absolute left-0 top-0 h-full w-2 cursor-col-resize hover:bg-indigo-500 hover:opacity-30"></div>
+            <div class="flex justify-between items-center mb-6">
+                <h2 id="followUpHeading" class="text-2xl font-bold text-indigo-400">Follow-Up</h2>
+                <button id="closeSidebar" class="text-gray-300 hover:text-indigo-400 text-3xl focus:outline-none"
+                    aria-label="Close follow-up sidebar">
+                    &times;
+                </button>
+            </div>
+            <div id="conversation" class="mb-6 space-y-4 prose prose-invert prose-ul:list-disc prose-ol:list-decimal max-w-none" style="--tw-prose-invert-bullets: #94a3b8; --tw-prose-invert-counters: #94a3b8;"></div>
+            <form id="followUpForm" class="space-y-4" aria-label="Follow-up question form">
+                <div class="relative">
+                    <input type="text" id="followUpInput" name="followUpInput" placeholder="Enter follow-up question"
+                        required
+                        class="w-full p-3 pr-12 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-700 text-gray-100 shadow-inner"
+                        disabled />
+                    <button type="submit" id="followUpSubmit"
+                        class="absolute inset-y-0 right-0 px-3 bg-indigo-500 text-white rounded-r-lg hover:bg-indigo-600 transition-all focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+                <p id="rateLimitMessage" class="text-sm text-red-400 mt-2 hidden">
+                    You have reached the message limit. Please wait a minute before sending more follow-ups.
+                </p>
+            </form>
+        </aside>
+    </div>
+    <script src="/template/script.js"></script>
+    <script>
+        document.getElementById('videoForm').addEventListener('submit', function () {
+            ['videoData', 'videoSummary', 'playerSection'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            ['videoTitle', 'videoDescription', 'videoTranscript', 'summaryContent', 'conversation'].forEach(id => {
+                document.getElementById(id).innerHTML = '';
+            });
+            ['followUpInput', 'followUpSubmit'].forEach(id => {
+                document.getElementById(id).disabled = true;
+            });
+            document.getElementById('rateLimitMessage').classList.add('hidden');
+        });
+    </script>
+</body>
+
+</html>

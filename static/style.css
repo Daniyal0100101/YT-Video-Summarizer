@@ -1,0 +1,402 @@
+/* 1. Root Variables */
+:root {
+    --primary-bg: #0f172a;
+    --secondary-bg: #1e293b;
+    --accent-color: #6366f1;
+    --text-primary: #f8fafc;
+    --text-secondary: #e2e8f0;
+    --accent-indigo: #818cf8;
+    --focus-color: #4f46e5;
+    --transition-standard: 0.3s ease-in-out;
+    --shadow-standard: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-large: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+/* 2. Base Styles */
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--primary-bg);
+    color: var(--text-primary);
+    line-height: 1.5;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    transition: background-color var(--transition-standard), color var(--transition-standard);
+    overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-weight: 700;
+    margin-top: 0;
+}
+
+/* 3. Layout & Sidebar Styles */
+.sidebar {
+    transition: transform var(--transition-standard), width var(--transition-standard);
+    will-change: transform;
+    z-index: 100;
+    box-shadow: var(--shadow-large);
+}
+
+@media (min-width: 768px) {
+    .sidebar-closed {
+        transform: translateX(100%);
+    }
+
+    #toggleSidebarDesktop {
+        display: flex;
+    }
+
+    main {
+        transition: padding-right var(--transition-standard);
+    }
+}
+
+@media (max-width: 767px) {
+    .sidebar {
+        width: 100% !important;
+    }
+
+    .sidebar-closed {
+        transform: translateX(100%);
+    }
+
+    #toggleSidebar {
+        display: flex;
+    }
+}
+
+/* 4. Animation Styles */
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    border-top-color: var(--accent-color);
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 5. Element State Styles */
+.hidden {
+    display: none !important;
+}
+
+.visible {
+    display: block;
+}
+
+/* 6. Form Styles */
+input,
+textarea,
+select {
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    transition: all var(--transition-standard);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--focus-color);
+}
+
+button {
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 0.5rem;
+    transition: all var(--transition-standard);
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 7. Content Styles */
+.card {
+    background-color: var(--secondary-bg);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-standard);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-large);
+}
+
+/* 8. Markdown Output Styles */
+.markdown-output {
+    line-height: 1.6;
+}
+
+/* Fix list formatting for both summary and follow-up sections */
+.markdown-output ul,
+.markdown-output ol {
+    padding-left: 2rem !important;
+    margin-bottom: 1rem !important;
+    list-style-position: outside !important;
+    display: block !important;
+}
+
+/* Additional selector to ensure bullet points appear */
+.prose ul, 
+.prose ol {
+    list-style-type: disc !important;
+    margin-left: 1.5em !important;
+    margin-top: 1em !important;
+    margin-bottom: 1em !important;
+}
+
+.prose ol {
+    list-style-type: decimal !important;
+}
+
+/* Ensure sidebar lists are formatted correctly */
+#conversation .markdown-output ul,
+#conversation .markdown-output ol,
+#conversation ul,
+#conversation ol {
+    padding-left: 1.75rem !important;
+    margin-bottom: 1rem !important;
+    display: block !important;
+}
+
+/* Make sure list items have appropriate display */
+.prose li,
+.markdown-output li {
+    display: list-item !important;
+    margin-bottom: 0.5rem !important;
+    line-height: 1.6 !important;
+}
+
+/* Fix margin for list items */
+#summaryContent li,
+#conversation li {
+    margin: 0.25em 0 !important;
+}
+
+/* Explicitly set the bullet style for different list levels */
+.markdown-output ul, .prose ul {
+    list-style-type: disc !important;
+}
+
+.markdown-output ol, .prose ol {
+    list-style-type: decimal !important;
+}
+
+.markdown-output ul ul, .prose ul ul {
+    list-style-type: circle !important;
+}
+
+.markdown-output ol ol, .prose ol ol,
+.markdown-output ul ol, .prose ul ol {
+    list-style-type: lower-alpha !important;
+}
+
+/* --- Headings Fixes --- */
+.markdown-output h1,
+.markdown-output h2,
+.markdown-output h3,
+.markdown-output h4,
+.markdown-output h5,
+.markdown-output h6 {
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    color: var(--accent-indigo);
+}
+
+.markdown-output h1 {
+    font-size: 1.5rem;
+    border-bottom: 1px solid #334155;
+    padding-bottom: 0.5rem;
+}
+
+.markdown-output h2 {
+    font-size: 1.3rem;
+}
+
+.markdown-output h3 {
+    font-size: 1.1rem;
+}
+
+.markdown-output p {
+    margin-bottom: 1rem;
+}
+
+.markdown-output pre {
+    background-color: var(--secondary-bg);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+
+.markdown-output code {
+    font-family: 'Consolas', 'Monaco', monospace;
+    background-color: var(--secondary-bg);
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.markdown-output pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.markdown-output blockquote {
+    border-left: 4px solid var(--accent-color);
+    padding-left: 1rem;
+    margin-left: 0;
+    color: #94a3b8;
+}
+
+/* 9. Responsive Styles */
+@media (max-width: 640px) {
+    h1 {
+        font-size: 1.75rem;
+    }
+
+    .card {
+        padding: 1rem;
+    }
+}
+
+@media (min-width: 1280px) {
+    .max-w-screen-xl {
+        max-width: 1280px;
+    }
+}
+
+/* 10. Scrollbar Styles */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.3);
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.7);
+}
+
+/* 11. Drag Handle (🔧 FIX: Wider for better usability) */
+#dragHandle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 12px;
+    /* Increased width for better grip */
+    height: 100%;
+    cursor: col-resize;
+    transition: background 0.2s ease;
+}
+
+#dragHandle:hover,
+#dragHandle:active {
+    background: rgba(99, 102, 241, 0.5);
+}
+
+/* 12. Loading Indicator */
+#loadingIndicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: opacity 0.3s ease;
+}
+
+/* Direct styling to force bullets */
+#summaryContent ul,
+#summaryContent ol,
+#conversation ul,
+#conversation ol {
+    list-style-position: outside !important;
+    padding-left: 2.5rem !important;
+    margin-top: 0.75em !important;
+    margin-bottom: 0.75em !important;
+    display: block !important;
+}
+
+#summaryContent ul,
+#conversation ul {
+    list-style-type: disc !important;
+    list-style-image: none !important;
+}
+
+#summaryContent ol,
+#conversation ol {
+    list-style-type: decimal !important;
+    list-style-image: none !important;
+}
+
+#summaryContent li,
+#conversation li {
+    display: list-item !important;
+    margin: 0.25em 0 !important;
+    padding-left: 0 !important;
+    text-indent: 0 !important;
+}
+
+/* Timestamp link styling */
+.timestamp-link,
+a[data-time] {
+    color: #818cf8 !important;
+    text-decoration: underline !important;
+    cursor: pointer;
+    padding: 0.1em 0.3em;
+    border-radius: 0.25em;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.timestamp-link:hover,
+a[data-time]:hover {
+    background-color: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc !important;
+}
