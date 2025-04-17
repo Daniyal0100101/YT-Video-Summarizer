@@ -2,8 +2,8 @@ import os
 import logging
 import asyncio
 import google.generativeai as genai
-from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl, Field, validator
@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 import time
 from cachetools import TTLCache
 import re
+import socket
+import uvicorn
 
 # ---------------------------------------------------
 # LOGGING CONFIGURATION
@@ -34,39 +36,41 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing. Please set it in the .env file.")
 
 # Cache configuration: store up to 100 transcript/summary pairs for 1 hour (3600 seconds)
-transcript_cache = TTLCache(maxsize=100, ttl=3600)
-summary_cache = TTLCache(maxsize=100, ttl=3600)
+TRANSCRIPT_CACHE_SIZE = 100
+CACHE_TTL = 3600  # 1 hour
+transcript_cache = TTLCache(maxsize=TRANSCRIPT_CACHE_SIZE, ttl=CACHE_TTL)
+summary_cache = TTLCache(maxsize=TRANSCRIPT_CACHE_SIZE, ttl=CACHE_TTL)
 
-# ----------------------------
-# 1) TWO SEPARATE SYSTEM PROMPTS
-# ----------------------------
+# ---------------------------------------------------
+# SYSTEM PROMPTS
+# ---------------------------------------------------
 SUMMARY_SYSTEM_INSTRUCTION = """
 You are an AI assistant specialized in generating **detailed, fact-based summaries** of YouTube videos. Your task is to provide a **comprehensive** yet **concise** breakdown of the video's content, ensuring full coverage of all major points.
 
-### **Guidelines for Generating Summaries**  
+### **Guidelines for Generating Summaries**
 
-1. **Complete and Fact-Based Coverage**  
-   - Capture **all essential topics, explanations, and details** covered in the video.  
-   - Avoid speculation or adding content not explicitly stated.  
-   - If specific details are unclear or missing, focus on summarizing what is available without assuming additional information.  
+1. **Complete and Fact-Based Coverage**
+   - Capture **all essential topics, explanations, and details** covered in the video.
+   - Avoid speculation or adding content not explicitly stated.
+   - If specific details are unclear or missing, focus on summarizing what is available without assuming additional information.
 
-2. **Well-Structured and Readable Format**  
-   - **Introduction:** Clearly describe the main topic and objective of the video.  
-   - **Key Points:** Break down all discussed sections, including explanations, instructions, or insights shared by the speaker.  
-   - **Conclusion:** Summarize the final message, takeaways, or action items mentioned.  
+2. **Well-Structured and Readable Format**
+   - **Introduction:** Clearly describe the main topic and objective of the video.
+   - **Key Points:** Break down all discussed sections, including explanations, instructions, or insights shared by the speaker.
+   - **Conclusion:** Summarize the final message, takeaways, or action items mentioned.
 
-3. **Context-Rich, Clear Summaries**  
-   - Present information in a way that fully represents the depth and intent of the content.  
-   - Ensure that **every major concept, process, or explanation given by the speaker is reflected** in the summary.  
-   - Use structured formatting (headings, bullet points) for better readability.  
+3. **Context-Rich, Clear Summaries**
+   - Present information in a way that fully represents the depth and intent of the content.
+   - Ensure that **every major concept, process, or explanation given by the speaker is reflected** in the summary.
+   - Use structured formatting (headings, bullet points) for better readability.
 
-4. **No Speculation or Missing Gaps**  
-   - If the speaker provides limited information on a topic, state only what is covered.  
-   - Do not infer or assume additional details.  
+4. **No Speculation or Missing Gaps**
+   - If the speaker provides limited information on a topic, state only what is covered.
+   - Do not infer or assume additional details.
 
-5. **Professional and Informative Tone**  
-   - Keep responses neutral, professional, and easy to understand.  
-   - Ensure clarity in technical explanations or instructional content.  
+5. **Professional and Informative Tone**
+   - Keep responses neutral, professional, and easy to understand.
+   - Ensure clarity in technical explanations or instructional content.
 
 Your role is to ensure **the summary fully reflects the video's content**, providing users with an accurate and complete understanding without adding or missing key details.
 """
@@ -104,20 +108,20 @@ FOLLOW-UP PRINCIPLES:
 Remember: Your goal is to help users understand the video content as accurately as possible by leveraging the complete video content data.
 """
 
-# Configure Gemini
-genai.configure(api_key=GEMINI_API_KEY)
+# ---------------------------------------------------
+# GEMINI MODEL INITIALIZATION
+# ---------------------------------------------------
+MODEL_NAME = "gemini-2.0-flash-lite"
+summary_model = None
+followup_model = None
 
-# ----------------------------
-# 2) INITIALIZE TWO MODELS
-# ----------------------------
 try:
+    genai.configure(api_key=GEMINI_API_KEY)
     summary_model = genai.GenerativeModel(
-        "gemini-2.0-flash-lite",
-        system_instruction=SUMMARY_SYSTEM_INSTRUCTION
+        MODEL_NAME, system_instruction=SUMMARY_SYSTEM_INSTRUCTION
     )
     followup_model = genai.GenerativeModel(
-        "gemini-2.0-flash-lite",
-        system_instruction=FOLLOWUP_SYSTEM_INSTRUCTION
+        MODEL_NAME, system_instruction=FOLLOWUP_SYSTEM_INSTRUCTION
     )
     logger.info("Successfully initialized both Gemini models")
 except Exception as e:
@@ -133,6 +137,9 @@ app = FastAPI(
     version="1.1.0"
 )
 
+# ---------------------------------------------------
+# MIDDLEWARE
+# ---------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -141,8 +148,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files BEFORE defining routes
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# ---------------------------------------------------
+# STATIC FILES
+# ---------------------------------------------------
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # ---------------------------------------------------
 # DATA MODELS
@@ -426,6 +436,12 @@ async def startup_event():
     if not GEMINI_API_KEY:
         logger.critical("Missing Gemini API key")
         raise ValueError("GEMINI_API_KEY is required")
+
+    # Get the hostname
+    hostname = socket.gethostname()
+    # Get the IP address
+    ip_address = socket.gethostbyname(hostname)
+    logger.info(f"Application running on local network: http://{ip_address}:8000")
 
 @app.on_event("shutdown")
 async def shutdown_event():
