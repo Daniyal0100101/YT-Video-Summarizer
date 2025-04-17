@@ -1,41 +1,115 @@
-# 📽️ YouTube Summarizer (AI-Powered)
+# YouTube Video Summarizer (Powered by Gemini AI)
 
-A web app that summarizes YouTube videos using the Gemini AI API. Just paste a YouTube link and get an instant, human-like summary with optional follow-up questions.
-
----
-
-## 🚀 Features
-
-- 🔗 Paste YouTube video link
-- 🧠 Summarizes using Gemini AI
-- 📄 Displays transcript + summary
-- 🤖 Ask follow-up questions
-- 🌐 Built with FastAPI + HTML/CSS/JS
+A fast, clean, and AI-powered web app that summarizes YouTube videos using Gemini AI. Paste any link, get an instant summary, view the transcript, and ask smart follow-up questions.
 
 ---
 
-## 🛠️ Tech Stack
+## Features
 
-- **Backend**: FastAPI
-- **Frontend**: Static HTML/CSS/JS
-- **AI**: Gemini API (Google AI)
-- **Hosting**: [Render](https://render.com) (free-tier friendly)
+- Paste any YouTube video URL
+- AI-generated, human-like summary (Gemini API)
+- Transcript viewer
+- Ask follow-up questions about the content
+- Built with FastAPI, TailwindCSS, and vanilla JavaScript
 
 ---
 
-## 📦 Setup Instructions
+## Tech Stack
+
+| Layer       | Stack                        |
+|-------------|------------------------------|
+| Frontend    | HTML, TailwindCSS, JavaScript |
+| Backend     | FastAPI (Python)             |
+| AI Model    | Gemini 2.0 Flash (Google AI) |
+| Video Tools | YouTubeTranscriptAPI, Pytube |
+| Deployment  | Optional: Render, Railway, etc. |
+
+---
+
+## Setup Instructions
+
+### 1. Clone the repository
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/your-username/youtube-summarizer.git
-cd youtube-summarizer
+git clone https://github.com/Daniyal0100101/YT-Video-Summarizer.git
+cd YT-Video-Summarizer
+```
 
-# 2. Install dependencies
+### 2. (Optional) Create a virtual environment
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+```
+
+### 3. Install dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# 3. Add your API key
-cp .env.example .env
-# Then edit .env and add your Gemini API key
+### 4. Set up environment variables
 
-# 4. Run the app
+```bash
+copy .env.example .env
+```
+
+Edit `.env` and add your actual Gemini API key:
+
+```
+GEMINI_API_KEY=your-api-key-here
+```
+
+### 5. Run the app
+
+```bash
 python app.py
+```
+
+Then open your browser and visit:
+
+```
+http://localhost:8000
+```
+
+---
+
+## Project Structure
+
+```
+YT-Video-Summarizer/
+│
+├── app.py                 # FastAPI backend
+├── static/                # Frontend (HTML/CSS/JS)
+│   ├── index.html
+│   ├── style.css
+│   └── script.js
+├── .env.example           # Environment variable template
+├── .gitignore             # Ignoring .env and .venv
+├── requirements.txt       # Python dependencies
+└── README.md
+```
+
+---
+
+## Environment Variables
+
+| Variable         | Description                 |
+|------------------|-----------------------------|
+| `GEMINI_API_KEY` | Required for Gemini AI access |
+
+---
+
+## Optional Improvements
+
+- Add summary export (PDF or Markdown)
+- Support multilingual transcripts
+- CI/CD pipeline for auto-deploy
+
+---
+
+## License
+
+All rights reserved. You must obtain explicit, written permission from the author before using, copying, modifying, or distributing any part of this project.
+
+Created by [@Daniyal0100101](https://github.com/Daniyal0100101)
