@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 import google.generativeai as genai
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -40,6 +40,32 @@ TRANSCRIPT_CACHE_SIZE = 100
 CACHE_TTL = 3600  # 1 hour
 transcript_cache = TTLCache(maxsize=TRANSCRIPT_CACHE_SIZE, ttl=CACHE_TTL)
 summary_cache = TTLCache(maxsize=TRANSCRIPT_CACHE_SIZE, ttl=CACHE_TTL)
+
+# ---------------------------------------------------
+# RATE LIMITING CONFIGURATION
+# ---------------------------------------------------
+RATE_LIMIT_REQUESTS = 5  # max requests
+RATE_LIMIT_WINDOW = 60   # seconds (1 minute)
+ai_rate_limit_cache = TTLCache(maxsize=10000, ttl=RATE_LIMIT_WINDOW)
+
+def get_client_ip(request: Request) -> str:
+    # Try to get real IP if behind proxy, else fallback
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(",")[0].strip()
+    else:
+        ip = request.client.host if request.client else "unknown"
+    return ip
+
+def check_rate_limit(request: Request):
+    ip = get_client_ip(request)
+    count = ai_rate_limit_cache.get(ip, 0)
+    if count >= RATE_LIMIT_REQUESTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded: {RATE_LIMIT_REQUESTS} requests per {RATE_LIMIT_WINDOW} seconds. Please wait and try again."
+        )
+    ai_rate_limit_cache[ip] = count + 1
 
 # ---------------------------------------------------
 # SYSTEM PROMPTS
@@ -371,9 +397,10 @@ async def fetch_video_data(request: VideoRequest):
         )
 
 @app.post("/api/generate-summary", response_class=JSONResponse)
-async def generate_summary_endpoint(request: VideoRequest):
+async def generate_summary_endpoint(request: VideoRequest, req: Request):
     """Generates a summary for the given YouTube video using the summary_model."""
     try:
+        check_rate_limit(req)
         logger.info(f"Received generate-summary request for URL: {request.youtube_url}")
         youtube_url = str(request.youtube_url)
         video_id = extract_youtube_id(youtube_url)
@@ -385,6 +412,14 @@ async def generate_summary_endpoint(request: VideoRequest):
         summary = await generate_summary(transcript, video_id)
         logger.info(f"Successfully generated summary for video ID: {video_id}")
         return JSONResponse(content={"summary": summary})
+    except HTTPException as e:
+        if e.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            return JSONResponse(status_code=429, content={"detail": e.detail})
+        logger.error(f"Error in generate_summary_endpoint: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Failed to generate summary: {str(e)}"}
+        )
     except Exception as e:
         logger.error(f"Error in generate_summary_endpoint: {str(e)}")
         return JSONResponse(
@@ -393,12 +428,13 @@ async def generate_summary_endpoint(request: VideoRequest):
         )
 
 @app.post("/api/follow-up", response_class=JSONResponse)
-async def follow_up_questions(request: FollowUpRequest):
+async def follow_up_questions(request: FollowUpRequest, req: Request):
     """
     Handles follow-up Q&A based on previous conversation history and the original transcript.
     We use both the conversation content and transcript to provide accurate answers.
     """
     try:
+        check_rate_limit(req)
         logger.info(f"Received follow-up request with question: {request.question}")
         formatted_convo = "\n".join([
             f"{msg.role.upper()}: {msg.content}" 
@@ -413,6 +449,14 @@ async def follow_up_questions(request: FollowUpRequest):
         
         logger.info("Successfully generated follow-up response")
         return JSONResponse(content={"response": response})
+    except HTTPException as e:
+        if e.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            return JSONResponse(status_code=429, content={"detail": e.detail})
+        logger.error(f"Error in follow_up_questions: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Failed to generate follow-up response: {str(e)}"}
+        )
     except Exception as e:
         logger.error(f"Error in follow_up_questions: {str(e)}")
         return JSONResponse(
