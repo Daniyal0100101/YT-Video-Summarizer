@@ -21,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoSummary = document.getElementById('videoSummary');
     const summaryContent = document.getElementById('summaryContent');
     const playerSection = document.getElementById('playerSection');
-    const youtubePlayerContainer = document.getElementById('youtubePlayer');
     const toggleSidebar = document.getElementById('toggleSidebar');
     const toggleSidebarDesktop = document.getElementById('toggleSidebarDesktop');
     const sidebar = document.getElementById('sidebar');
@@ -141,6 +140,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Second pass: Find standalone timestamps like "~0:59" without parentheses
         const standaloneTimestampRegex = /~\d+:\d+/g;
         
+        // Third pass: Find timestamps in square brackets like [0:24] or [1:02:15]
+        const squareBracketTimestampRegex = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g;
+        
         // Find all text nodes within the element
         const textNodes = [];
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
@@ -153,168 +155,153 @@ document.addEventListener('DOMContentLoaded', () => {
         // Process each text node for timestamps in parentheses
         textNodes.forEach(textNode => {
             const text = textNode.nodeValue;
-            if (!text || !timestampRegex.test(text)) return;
-            
-            // Reset the regex after test
-            timestampRegex.lastIndex = 0;
-            
-            let lastIndex = 0;
-            let match;
-            const fragments = [];
-            
-            while ((match = timestampRegex.exec(text)) !== null) {
-                // Add text before the timestamp
-                if (match.index > lastIndex) {
-                    fragments.push(document.createTextNode(text.substring(lastIndex, match.index)));
-                }
-                
-                // Get the full matched timestamp text
-                const fullTimestamp = match[0];
-
-                // Find all individual timestamps within the match (like in "~1:53, ~2:59")
-                const individualTimestamps = fullTimestamp.match(/~\d+:\d+/g);
-                
-                if (individualTimestamps && individualTimestamps.length > 0) {
-                    // This is a compound timestamp with multiple timestamps
-                    const timestampLink = document.createElement('a');
-                    timestampLink.href = '#';
-                    timestampLink.className = 'timestamp-link text-indigo-400 hover:text-indigo-300 cursor-pointer underline';
-                    timestampLink.textContent = fullTimestamp;
-                    
-                    // Use the first timestamp for navigation
-                    const firstTimestamp = individualTimestamps[0].substring(1); // remove the ~ prefix
-                    const seconds = parseTimestamp(firstTimestamp);
-                    timestampLink.setAttribute('data-time', seconds);
-                    
-                    timestampLink.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        seekToTime(seconds);
-                    });
-                    
-                    fragments.push(timestampLink);
-                } else {
-                    // Handle "at around" format or any other formats
-                    const atAroundMatch = fullTimestamp.match(/at around (\d+:\d+)/);
-                    let timestamp;
-                    
-                    if (atAroundMatch) {
-                        timestamp = atAroundMatch[1];
-                    } else {
-                        // Try to extract any timestamp format
-                        const genericMatch = fullTimestamp.match(/\d+:\d+/);
-                        timestamp = genericMatch ? genericMatch[0] : null;
+            if (!text) return;
+            let didReplace = false;
+            // Parentheses timestamps
+            if (timestampRegex.test(text)) {
+                timestampRegex.lastIndex = 0;
+                let lastIndex = 0;
+                let match;
+                const fragments = [];
+                while ((match = timestampRegex.exec(text)) !== null) {
+                    if (match.index > lastIndex) {
+                        fragments.push(document.createTextNode(text.substring(lastIndex, match.index)));
                     }
-                    
-                    if (timestamp) {
-                        const seconds = parseTimestamp(timestamp);
+                    const fullTimestamp = match[0];
+                    const individualTimestamps = fullTimestamp.match(/~\d+:\d+/g);
+                    if (individualTimestamps && individualTimestamps.length > 0) {
                         const timestampLink = document.createElement('a');
                         timestampLink.href = '#';
                         timestampLink.className = 'timestamp-link text-indigo-400 hover:text-indigo-300 cursor-pointer underline';
                         timestampLink.textContent = fullTimestamp;
+                        const firstTimestamp = individualTimestamps[0].substring(1);
+                        const seconds = parseTimestamp(firstTimestamp);
                         timestampLink.setAttribute('data-time', seconds);
-                        
                         timestampLink.addEventListener('click', (e) => {
                             e.preventDefault();
                             seekToTime(seconds);
                         });
-                        
                         fragments.push(timestampLink);
                     } else {
-                        // Fallback if no timestamp could be found
-                        fragments.push(document.createTextNode(fullTimestamp));
+                        const atAroundMatch = fullTimestamp.match(/at around (\d+:\d+)/);
+                        let timestamp;
+                        if (atAroundMatch) {
+                            timestamp = atAroundMatch[1];
+                        } else {
+                            const genericMatch = fullTimestamp.match(/\d+:\d+/);
+                            timestamp = genericMatch ? genericMatch[0] : null;
+                        }
+                        if (timestamp) {
+                            const seconds = parseTimestamp(timestamp);
+                            const timestampLink = document.createElement('a');
+                            timestampLink.href = '#';
+                            timestampLink.className = 'timestamp-link text-indigo-400 hover:text-indigo-300 cursor-pointer underline';
+                            timestampLink.textContent = fullTimestamp;
+                            timestampLink.setAttribute('data-time', seconds);
+                            timestampLink.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                seekToTime(seconds);
+                            });
+                            fragments.push(timestampLink);
+                        } else {
+                            fragments.push(document.createTextNode(fullTimestamp));
+                        }
                     }
+                    lastIndex = match.index + match[0].length;
                 }
-                
-                lastIndex = match.index + match[0].length;
+                if (lastIndex < text.length) {
+                    fragments.push(document.createTextNode(text.substring(lastIndex)));
+                }
+                if (fragments.length > 0) {
+                    const parent = textNode.parentNode;
+                    fragments.forEach(fragment => {
+                        parent.insertBefore(fragment, textNode);
+                    });
+                    parent.removeChild(textNode);
+                    didReplace = true;
+                }
             }
-            
-            // Add any remaining text
-            if (lastIndex < text.length) {
-                fragments.push(document.createTextNode(text.substring(lastIndex)));
+            // Standalone ~MM:SS timestamps
+            if (!didReplace && standaloneTimestampRegex.test(text)) {
+                standaloneTimestampRegex.lastIndex = 0;
+                let lastIndex = 0;
+                let match;
+                const fragments = [];
+                while ((match = standaloneTimestampRegex.exec(text)) !== null) {
+                    if (match.index > lastIndex) {
+                        fragments.push(document.createTextNode(text.substring(lastIndex, match.index)));
+                    }
+                    const fullTimestamp = match[0];
+                    const timestamp = fullTimestamp.substring(1);
+                    const seconds = parseTimestamp(timestamp);
+                    const timestampLink = document.createElement('a');
+                    timestampLink.href = '#';
+                    timestampLink.className = 'timestamp-link text-indigo-400 hover:text-indigo-300 cursor-pointer underline';
+                    timestampLink.textContent = fullTimestamp;
+                    timestampLink.setAttribute('data-time', seconds);
+                    timestampLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        seekToTime(seconds);
+                    });
+                    fragments.push(timestampLink);
+                    lastIndex = match.index + match[0].length;
+                }
+                if (lastIndex < text.length) {
+                    fragments.push(document.createTextNode(text.substring(lastIndex)));
+                }
+                if (fragments.length > 0) {
+                    const parent = textNode.parentNode;
+                    fragments.forEach(fragment => {
+                        parent.insertBefore(fragment, textNode);
+                    });
+                    parent.removeChild(textNode);
+                    didReplace = true;
+                }
             }
-            
-            // Replace the original text node with the new fragments
-            if (fragments.length > 0) {
-                const parent = textNode.parentNode;
-                fragments.forEach(fragment => {
-                    parent.insertBefore(fragment, textNode);
-                });
-                parent.removeChild(textNode);
+            // Square bracket [MM:SS] or [H:MM:SS] timestamps
+            if (!didReplace && squareBracketTimestampRegex.test(text)) {
+                squareBracketTimestampRegex.lastIndex = 0;
+                let lastIndex = 0;
+                let match;
+                const fragments = [];
+                while ((match = squareBracketTimestampRegex.exec(text)) !== null) {
+                    if (match.index > lastIndex) {
+                        fragments.push(document.createTextNode(text.substring(lastIndex, match.index)));
+                    }
+                    const fullTimestamp = match[0]; // e.g., "[0:24]"
+                    const timestamp = match[1];     // e.g., "0:24" or "1:02:15"
+                    // Convert to seconds
+                    const parts = timestamp.split(':').map(Number);
+                    let seconds = 0;
+                    if (parts.length === 2) {
+                        seconds = parts[0] * 60 + parts[1];
+                    } else if (parts.length === 3) {
+                        seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                    }
+                    const timestampLink = document.createElement('a');
+                    timestampLink.href = '#';
+                    timestampLink.className = 'timestamp-link text-indigo-400 hover:text-indigo-300 cursor-pointer underline';
+                    timestampLink.textContent = fullTimestamp;
+                    timestampLink.setAttribute('data-time', seconds);
+                    timestampLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        seekToTime(seconds);
+                    });
+                    fragments.push(timestampLink);
+                    lastIndex = match.index + match[0].length;
+                }
+                if (lastIndex < text.length) {
+                    fragments.push(document.createTextNode(text.substring(lastIndex)));
+                }
+                if (fragments.length > 0) {
+                    const parent = textNode.parentNode;
+                    fragments.forEach(fragment => {
+                        parent.insertBefore(fragment, textNode);
+                    });
+                    parent.removeChild(textNode);
+                }
             }
         });
-        
-        // Second pass: Process standalone timestamps like "~0:59"
-        const remainingTextNodes = [];
-        const newWalker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
-            acceptNode: function(node) {
-                // Skip text nodes that are inside our timestamp links
-                if (node.parentNode && 
-                    (node.parentNode.hasAttribute('data-time') || 
-                     node.parentNode.classList.contains('timestamp-link'))) {
-                    return NodeFilter.FILTER_REJECT;
-                }
-                return NodeFilter.FILTER_ACCEPT;
-            }
-        }, false);
-        
-        let textNode;
-        while (textNode = newWalker.nextNode()) {
-            remainingTextNodes.push(textNode);
-        }
-        
-        remainingTextNodes.forEach(textNode => {
-            const text = textNode.nodeValue;
-            if (!text || !standaloneTimestampRegex.test(text)) return;
-            
-            // Reset the regex after test
-            standaloneTimestampRegex.lastIndex = 0;
-            
-            let lastIndex = 0;
-            let match;
-            const fragments = [];
-            
-            while ((match = standaloneTimestampRegex.exec(text)) !== null) {
-                // Add text before the timestamp
-                if (match.index > lastIndex) {
-                    fragments.push(document.createTextNode(text.substring(lastIndex, match.index)));
-                }
-                
-                // Get the matched timestamp
-                const fullTimestamp = match[0];
-                // Remove the tilde
-                const timestamp = fullTimestamp.substring(1);
-                const seconds = parseTimestamp(timestamp);
-                
-                const timestampLink = document.createElement('a');
-                timestampLink.href = '#';
-                timestampLink.className = 'timestamp-link text-indigo-400 hover:text-indigo-300 cursor-pointer underline';
-                timestampLink.textContent = fullTimestamp;
-                timestampLink.setAttribute('data-time', seconds);
-                
-                timestampLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    seekToTime(seconds);
-                });
-                
-                fragments.push(timestampLink);
-                lastIndex = match.index + match[0].length;
-            }
-            
-            // Add any remaining text
-            if (lastIndex < text.length) {
-                fragments.push(document.createTextNode(text.substring(lastIndex)));
-            }
-            
-            // Replace the original text node with the new fragments
-            if (fragments.length > 0) {
-                const parent = textNode.parentNode;
-                fragments.forEach(fragment => {
-                    parent.insertBefore(fragment, textNode);
-                });
-                parent.removeChild(textNode);
-            }
-        });
-        
         // Also check any existing links that might contain timestamps
         const allLinks = element.querySelectorAll('a');
         allLinks.forEach(link => {

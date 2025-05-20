@@ -17,9 +17,9 @@ import re
 import socket
 import uvicorn
 
-# ---------------------------------------------------
+# -----------------------------
 # LOGGING CONFIGURATION
-# ---------------------------------------------------
+# -----------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -27,35 +27,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------
-# SETUP & CONFIGURATION
-# ---------------------------------------------------
+# -----------------------------
+# ENVIRONMENT & API KEY SETUP
+# -----------------------------
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing. Please set it in the .env file.")
 
-# Cache configuration: store up to 100 transcript/summary pairs for 1 hour (3600 seconds)
+# -----------------------------
+# CACHE CONFIGURATION
+# -----------------------------
 TRANSCRIPT_CACHE_SIZE = 100
 CACHE_TTL = 3600  # 1 hour
 transcript_cache = TTLCache(maxsize=TRANSCRIPT_CACHE_SIZE, ttl=CACHE_TTL)
 summary_cache = TTLCache(maxsize=TRANSCRIPT_CACHE_SIZE, ttl=CACHE_TTL)
 
-# ---------------------------------------------------
-# RATE LIMITING CONFIGURATION
-# ---------------------------------------------------
-RATE_LIMIT_REQUESTS = 5  # max requests
-RATE_LIMIT_WINDOW = 60   # seconds (1 minute)
+# -----------------------------
+# RATE LIMITING (PER-IP)
+# -----------------------------
+RATE_LIMIT_REQUESTS = 5  # max requests per window
+RATE_LIMIT_WINDOW = 60   # seconds
 ai_rate_limit_cache = TTLCache(maxsize=10000, ttl=RATE_LIMIT_WINDOW)
 
 def get_client_ip(request: Request) -> str:
-    # Try to get real IP if behind proxy, else fallback
     x_forwarded_for = request.headers.get("x-forwarded-for")
     if x_forwarded_for:
-        ip = x_forwarded_for.split(",")[0].strip()
-    else:
-        ip = request.client.host if request.client else "unknown"
-    return ip
+        return x_forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
 
 def check_rate_limit(request: Request):
     ip = get_client_ip(request)
@@ -67,9 +66,9 @@ def check_rate_limit(request: Request):
         )
     ai_rate_limit_cache[ip] = count + 1
 
-# ---------------------------------------------------
-# SYSTEM PROMPTS
-# ---------------------------------------------------
+# -----------------------------
+# GEMINI SYSTEM PROMPTS
+# -----------------------------
 SUMMARY_SYSTEM_INSTRUCTION = """
 You are an AI assistant specialized in generating **detailed, fact-based summaries** of YouTube videos. Your task is to provide a **comprehensive** yet **concise** breakdown of the video's content, ensuring full coverage of all major points.
 
@@ -134,9 +133,9 @@ FOLLOW-UP PRINCIPLES:
 Remember: Your goal is to help users understand the video content as accurately as possible by leveraging the complete video content data.
 """
 
-# ---------------------------------------------------
+# -----------------------------
 # GEMINI MODEL INITIALIZATION
-# ---------------------------------------------------
+# -----------------------------
 MODEL_NAME = "gemini-2.0-flash-lite"
 summary_model = None
 followup_model = None
@@ -154,18 +153,18 @@ except Exception as e:
     logger.error(f"Failed to initialize Gemini models: {str(e)}")
     raise
 
-# ---------------------------------------------------
+# -----------------------------
 # FASTAPI APP SETUP
-# ---------------------------------------------------
+# -----------------------------
 app = FastAPI(
     title="YouTube Video Summarizer API",
     description="API for summarizing YouTube videos and providing interactive follow-up capabilities",
     version="1.1.0"
 )
 
-# ---------------------------------------------------
-# MIDDLEWARE
-# ---------------------------------------------------
+# -----------------------------
+# CORS CONFIGURATION
+# -----------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -174,15 +173,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------
-# STATIC FILES
-# ---------------------------------------------------
+# -----------------------------
+# STATIC FILES (for Render deployment)
+# -----------------------------
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+if os.path.exists(STATIC_DIR):
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# ---------------------------------------------------
+# -----------------------------
 # DATA MODELS
-# ---------------------------------------------------
+# -----------------------------
 class VideoRequest(BaseModel):
     youtube_url: HttpUrl = Field(..., description="Full YouTube video URL")
 
@@ -218,9 +218,9 @@ class SummaryResponse(BaseModel):
 class FollowUpResponse(BaseModel):
     response: str
 
-# ---------------------------------------------------
-# MIDDLEWARE FOR REQUEST TIMING AND LOGGING
-# ---------------------------------------------------
+# -----------------------------
+# REQUEST TIMING LOGGING
+# -----------------------------
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.time()
@@ -230,9 +230,9 @@ async def add_process_time_header(request: Request, call_next):
     logger.info(f"Request to {request.url.path} processed in {process_time:.4f} seconds")
     return response
 
-# ---------------------------------------------------
+# -----------------------------
 # HELPER FUNCTIONS
-# ---------------------------------------------------
+# -----------------------------
 def extract_youtube_id(url: str) -> str:
     youtube_regex = r"(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?)/|.*[?&]v=)|youtu\.be/)([^\"&?/\s]{11})"
     match = re.search(youtube_regex, url)
@@ -241,19 +241,17 @@ def extract_youtube_id(url: str) -> str:
     raise HTTPException(status_code=400, detail="Invalid YouTube URL format.")
 
 def format_timestamp(seconds: float) -> str:
-    """Convert raw seconds to MM:SS format for user-friendly references."""
     minutes = int(seconds // 60)
     remaining_seconds = int(seconds % 60)
     return f"{minutes}:{remaining_seconds:02d}"
 
 async def get_transcript(video_id: str) -> str:
-    """Fetches the YouTube transcript using the transcript API. Uses cache if available."""
+    """Fetch YouTube transcript, using cache if available."""
     if video_id in transcript_cache:
         logger.info(f"Transcript cache hit for video {video_id}")
         return transcript_cache[video_id]
     try:
         transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
-        # Join only the 'text' entries – timestamps from the API are not used here.
         transcript = "\n".join(f"[{round(item['start'], 2)}s] {item['text']}" for item in transcript_data)
         transcript_cache[video_id] = transcript
         return transcript
@@ -262,7 +260,7 @@ async def get_transcript(video_id: str) -> str:
         return "Transcript not available."
 
 async def get_video_details(youtube_url: str) -> Dict[str, Any]:
-    """Fetches video metadata from YouTube."""
+    """Fetch video metadata from YouTube."""
     video_id = extract_youtube_id(youtube_url)
     try:
         yt = YouTube(youtube_url)
@@ -286,14 +284,14 @@ async def get_video_details(youtube_url: str) -> Dict[str, Any]:
         }
 
 async def generate_summary(transcript: str, video_id: str) -> str:
-    """Uses the summary_model to generate a structured summary from the transcript."""
+    """Generate a structured summary from the transcript using Gemini."""
     if video_id in summary_cache:
         logger.info(f"Summary cache hit for video {video_id}")
         return summary_cache[video_id]
     if not transcript or transcript == "Transcript not available." or len(transcript.split()) < 10:
         return "No meaningful video content available for summarization."
 
-    # Create a prompt that instructs the model not to generate fake timestamps
+    # Create a prompt that instructs the model to generate timestamps
     prompt = f"""
     Summarize the following YouTube video content concisely:
 
@@ -302,7 +300,7 @@ async def generate_summary(transcript: str, video_id: str) -> str:
 
     Instructions:
     - Provide an introduction, key points, and conclusion.
-    - Do NOT create or include any timestamps unless they are explicitly present in the transcript.
+    - If timestamps are present in the transcript, include them in the summary for reference.
     - Ensure factual accuracy and do not add information not in the transcript.
 
     Use markdown formatting for readability.
@@ -319,19 +317,15 @@ async def generate_summary(transcript: str, video_id: str) -> str:
         return error_msg
 
 async def generate_followup_response(question: str, formatted_convo: str, transcript: str) -> str:
-    """Uses the followup_model to handle follow-up Q&A based on the conversation and transcript."""
+    """Generate follow-up Q&A based on conversation and transcript."""
     try:
-        # Preprocess the transcript to convert timestamps to user-friendly format
         processed_transcript = transcript
         if transcript and transcript != "Transcript not available.":
-            # Look for timestamp patterns like [123.45s] and convert them
             timestamp_pattern = r"\[(\d+\.\d+)s\]"
             def replace_timestamp(match):
                 seconds = float(match.group(1))
                 return f"[{format_timestamp(seconds)}]"
             processed_transcript = re.sub(timestamp_pattern, replace_timestamp, transcript)
-        
-        # Create a structured prompt that emphasizes using the transcript and not fabricating timestamps.
         prompt = f"""ORIGINAL VIDEO TRANSCRIPT:
 {processed_transcript}
 
@@ -360,13 +354,12 @@ Remember: the transcript contains the exact words spoken in the video and should
         logger.error(f"Error generating follow-up response: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate follow-up response: {str(e)}")
 
-# ---------------------------------------------------
+# -----------------------------
 # ROUTES
-# ---------------------------------------------------
+# -----------------------------
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
-    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-    file_path = os.path.join(static_dir, "index.html")
+    file_path = os.path.join(STATIC_DIR, "index.html")
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -375,17 +368,15 @@ async def serve_index():
 
 @app.post("/api/video-data", response_class=JSONResponse)
 async def fetch_video_data(request: VideoRequest):
-    """Fetches video details (title, description, and transcript) from YouTube."""
+    """Fetch video details (title, description, and transcript) from YouTube."""
     try:
         logger.info(f"Received video-data request for URL: {request.youtube_url}")
         youtube_url = str(request.youtube_url)
         video_id = extract_youtube_id(youtube_url)
-        
         video_details, transcript = await asyncio.gather(
             get_video_details(youtube_url),
             get_transcript(video_id)
         )
-        
         result = {**video_details, "transcript": transcript}
         logger.info(f"Successfully processed video data for ID: {video_id}")
         return JSONResponse(content=result)
@@ -398,17 +389,15 @@ async def fetch_video_data(request: VideoRequest):
 
 @app.post("/api/generate-summary", response_class=JSONResponse)
 async def generate_summary_endpoint(request: VideoRequest, req: Request):
-    """Generates a summary for the given YouTube video using the summary_model."""
+    """Generate a summary for the given YouTube video using the Gemini model."""
     try:
         check_rate_limit(req)
         logger.info(f"Received generate-summary request for URL: {request.youtube_url}")
         youtube_url = str(request.youtube_url)
         video_id = extract_youtube_id(youtube_url)
-        
         transcript = await get_transcript(video_id)
         if transcript == "Transcript not available.":
             return JSONResponse(content={"summary": "No video content available for this video."})
-            
         summary = await generate_summary(transcript, video_id)
         logger.info(f"Successfully generated summary for video ID: {video_id}")
         return JSONResponse(content={"summary": summary})
@@ -429,10 +418,7 @@ async def generate_summary_endpoint(request: VideoRequest, req: Request):
 
 @app.post("/api/follow-up", response_class=JSONResponse)
 async def follow_up_questions(request: FollowUpRequest, req: Request):
-    """
-    Handles follow-up Q&A based on previous conversation history and the original transcript.
-    We use both the conversation content and transcript to provide accurate answers.
-    """
+    """Handle follow-up Q&A based on previous conversation history and the original transcript."""
     try:
         check_rate_limit(req)
         logger.info(f"Received follow-up request with question: {request.question}")
@@ -440,13 +426,11 @@ async def follow_up_questions(request: FollowUpRequest, req: Request):
             f"{msg.role.upper()}: {msg.content}" 
             for msg in request.history
         ])
-        
         response = await generate_followup_response(
             request.question, 
             formatted_convo,
             request.transcript
         )
-        
         logger.info("Successfully generated follow-up response")
         return JSONResponse(content={"response": response})
     except HTTPException as e:
@@ -464,36 +448,28 @@ async def follow_up_questions(request: FollowUpRequest, req: Request):
             content={"detail": f"Failed to generate follow-up response: {str(e)}"}
         )
 
-# ---------------------------------------------------
-# STATIC FILES
-# ---------------------------------------------------
-static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-# ---------------------------------------------------
-# APP STARTUP EVENTS
-# ---------------------------------------------------
+# -----------------------------
+# APP STARTUP/SHUTDOWN EVENTS
+# -----------------------------
 @app.on_event("startup")
 async def startup_event():
     logger.info("Application starting up...")
     if not GEMINI_API_KEY:
         logger.critical("Missing Gemini API key")
         raise ValueError("GEMINI_API_KEY is required")
-
-    # Get the hostname
-    hostname = socket.gethostname()
-    # Get the IP address
-    ip_address = socket.gethostbyname(hostname)
-    logger.info(f"Application running on local network: http://{ip_address}:8000")
+    try:
+        hostname = socket.gethostname()
+        ip_address = socket.gethostbyname(hostname)
+        logger.info(f"Application running on local network: http://{ip_address}:8000")
+    except Exception:
+        pass
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Application shutting down...")
 
-# ---------------------------------------------------
-# MAIN ENTRY POINT
-# ---------------------------------------------------
+# -----------------------------
+# MAIN ENTRY POINT (for local dev only)
+# -----------------------------
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
