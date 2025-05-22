@@ -32,8 +32,6 @@ logger = logging.getLogger(__name__)
 # -----------------------------
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Optional: HTTP proxy for YouTube access (for cloud deployment)
-PROXY_URL = os.getenv("PROXY_URL")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing. Please set it in the .env file.")
 
@@ -248,15 +246,12 @@ def format_timestamp(seconds: float) -> str:
     return f"{minutes}:{remaining_seconds:02d}"
 
 async def get_transcript(video_id: str) -> str:
-    """Fetch YouTube transcript, using cache if available. Uses proxy if set."""
+    """Fetch YouTube transcript, using cache if available."""
     if video_id in transcript_cache:
         logger.info(f"Transcript cache hit for video {video_id}")
         return transcript_cache[video_id]
     try:
-        proxies = None
-        if PROXY_URL:
-            proxies = {"http": PROXY_URL, "https": PROXY_URL}
-        transcript_data = YouTubeTranscriptApi.get_transcript(video_id, proxies=proxies) if proxies else YouTubeTranscriptApi.get_transcript(video_id)
+        transcript_data = YouTubeTranscriptApi.get_transcript(video_id)
         transcript = "\n".join(f"[{round(item['start'], 2)}s] {item['text']}" for item in transcript_data)
         transcript_cache[video_id] = transcript
         return transcript
@@ -265,10 +260,10 @@ async def get_transcript(video_id: str) -> str:
         return "Transcript not available."
 
 async def get_video_details(youtube_url: str) -> Dict[str, Any]:
-    """Fetch video metadata from YouTube. Uses proxy if set."""
+    """Fetch video metadata from YouTube."""
     video_id = extract_youtube_id(youtube_url)
     try:
-        yt = YouTube(youtube_url, proxies={"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None)
+        yt = YouTube(youtube_url)
         return {
             "title": yt.title or "Title unavailable",
             "description": yt.description or "Description unavailable",
