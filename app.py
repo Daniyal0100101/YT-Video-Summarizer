@@ -257,7 +257,7 @@ async def get_transcript(video_id: str) -> str:
         return transcript
     except Exception as e:
         logger.warning(f"Failed to fetch transcript for {video_id}: {str(e)}")
-        return "Transcript not available."
+        return "Transcript is not available for this video. This feature may not work on cloud servers due to YouTube restrictions. We're working on it."
 
 async def get_video_details(youtube_url: str) -> Dict[str, Any]:
     """Fetch video metadata from YouTube."""
@@ -396,8 +396,8 @@ async def generate_summary_endpoint(request: VideoRequest, req: Request):
         youtube_url = str(request.youtube_url)
         video_id = extract_youtube_id(youtube_url)
         transcript = await get_transcript(video_id)
-        if transcript == "Transcript not available.":
-            return JSONResponse(content={"summary": "No video content available for this video."})
+        if transcript.startswith("Transcript is not available"):
+            return JSONResponse(content={"summary": transcript})
         summary = await generate_summary(transcript, video_id)
         logger.info(f"Successfully generated summary for video ID: {video_id}")
         return JSONResponse(content={"summary": summary})
