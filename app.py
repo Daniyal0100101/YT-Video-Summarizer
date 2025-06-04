@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, HttpUrl, Field, validator
 from typing import List, Dict, Any, Optional
 from youtube_transcript_api import YouTubeTranscriptApi
-from yt_dlp import YoutubeDL
+from pytube import YouTube
 from dotenv import load_dotenv
 import time
 from cachetools import TTLCache
@@ -260,26 +260,17 @@ async def get_transcript(video_id: str) -> str:
         return "Transcript is not available for this video. This feature may not work on cloud servers due to YouTube restrictions. We're working on it."
 
 async def get_video_details(youtube_url: str) -> Dict[str, Any]:
-    """Fetch video metadata using yt-dlp."""
+    """Fetch video metadata from YouTube."""
     video_id = extract_youtube_id(youtube_url)
-    ydl_opts = {"quiet": True, "skip_download": True}
     try:
-        info = await asyncio.to_thread(
-            lambda: YoutubeDL(ydl_opts).extract_info(youtube_url, download=False)
-        )
-        upload_date = info.get("upload_date")
-        formatted_date = (
-            f"{upload_date[0:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
-            if upload_date
-            else None
-        )
+        yt = YouTube(youtube_url)
         return {
-            "title": info.get("title") or "Title unavailable",
-            "description": info.get("description") or "Description unavailable",
+            "title": yt.title or "Title unavailable",
+            "description": yt.description or "Description unavailable",
             "video_id": video_id,
-            "duration": info.get("duration"),
-            "author": info.get("uploader"),
-            "published_date": formatted_date,
+            "duration": yt.length,
+            "author": yt.author,
+            "published_date": yt.publish_date.strftime("%Y-%m-%d") if yt.publish_date else None
         }
     except Exception as e:
         logger.error(f"Error fetching video details: {str(e)}")
@@ -289,7 +280,7 @@ async def get_video_details(youtube_url: str) -> Dict[str, Any]:
             "video_id": video_id,
             "duration": None,
             "author": None,
-            "published_date": None,
+            "published_date": None
         }
 
 async def generate_summary(transcript: str, video_id: str) -> str:
@@ -478,7 +469,7 @@ async def shutdown_event():
     logger.info("Application shutting down...")
 
 # -----------------------------
-# MAIN SERVER ENTRY POINT (for local dev only)
+# MAIN ENTRY POINT (for local dev only)
 # -----------------------------
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
