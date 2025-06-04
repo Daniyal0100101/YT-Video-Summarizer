@@ -463,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const fetchFollowUpResponse = async (question, transcript) => {
+    const fetchFollowUpResponse = async (question, transcript, title, description) => {
         try {
             console.log('Fetching follow-up response:', question);
             const response = await fetch('/api/follow-up', {
@@ -472,6 +472,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     question,
                     transcript,
+                    title,
+                    description,
                     history: conversationHistory,
                 }),
             });
@@ -616,8 +618,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const transcript = videoTranscript.textContent;
-        if (!transcript || transcript === 'Transcript not available.') {
-            showError('No transcript available for follow-up questions');
+        const title = videoTitle.textContent;
+        const description = videoDescription.textContent;
+        if (!transcript && !title && !description) {
+            showError('No video data available for follow-up questions');
             return;
         }
 
@@ -631,7 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
             followUpSubmit.disabled = true;
 
             // ask server
-            const response = await fetchFollowUpResponse(question, transcript);
+            const response = await fetchFollowUpResponse(question, transcript, title, description);
 
             // assistant message
             conversationHistory.push({ role: 'assistant', content: response.response });

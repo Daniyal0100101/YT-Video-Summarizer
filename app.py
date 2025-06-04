@@ -202,6 +202,8 @@ class FollowUpRequest(BaseModel):
     question: str = Field(..., description="User's follow-up question")
     history: List[ConversationMessage] = Field(..., description="Conversation history")
     transcript: str = Field(..., description="Original video transcript")
+    title: Optional[str] = Field(None, description="Video title")
+    description: Optional[str] = Field(None, description="Video description")
 
 class VideoResponse(BaseModel):
     title: str
@@ -325,18 +327,21 @@ async def generate_summary(transcript: str, video_id: str) -> str:
         logger.error(error_msg)
         return error_msg
 
-async def generate_followup_response(question: str, formatted_convo: str, transcript: str) -> str:
-    """Generate follow-up Q&A based on conversation and transcript."""
+async def generate_followup_response(question: str, formatted_convo: str, transcript: str, title: Optional[str], description: Optional[str]) -> str:
+    """Generate follow-up Q&A based on conversation, transcript, title, and description."""
     try:
-        processed_transcript = transcript
-        if transcript and transcript != "Transcript not available.":
-            timestamp_pattern = r"\[(\d+\.\d+)s\]"
-            def replace_timestamp(match):
-                seconds = float(match.group(1))
-                return f"[{format_timestamp(seconds)}]"
-            processed_transcript = re.sub(timestamp_pattern, replace_timestamp, transcript)
-        prompt = f"""ORIGINAL VIDEO TRANSCRIPT:
-{processed_transcript}
+        # Build context string
+        context_parts = []
+        if title:
+            context_parts.append(f"VIDEO TITLE:\n{title}")
+        if description:
+            context_parts.append(f"VIDEO DESCRIPTION:\n{description}")
+        if transcript:
+            context_parts.append(f"ORIGINAL VIDEO TRANSCRIPT:\n{transcript}")
+        context_str = "\n\n".join(context_parts)
+        if not context_str.strip():
+            return "No video data (title, description, or transcript) is available to answer your question."
+        prompt = f"""{context_str}
 
 CONVERSATION HISTORY:
 {formatted_convo}
@@ -344,18 +349,11 @@ CONVERSATION HISTORY:
 USER QUESTION: {question}
 
 Instructions:
-1. Answer the question using primarily the ORIGINAL TRANSCRIPT as your source of truth.
-2. Be specific and cite information directly from the transcript when possible.
-3. If the information isn't in the transcript, clearly state this limitation.
+1. Answer the question using only the provided video data (title, description, transcript). Do not speculate or use outside knowledge.
+2. If the answer is not present in the provided data, clearly state that you cannot answer due to missing information.
+3. Be specific and cite information directly from the data when possible.
 4. Format your response for readability (bullet points, bold for key points, etc.).
-5. When referencing specific content from the video:
-   - Include a simple time reference in (~MM:SS) format when you quote or reference specific content
-   - Only include time references when citing important information
-   - References should look like "(~2:45)" or "(at around 15:30)" - keep them simple and user-friendly
-   - Use general references like "(early in the video)" when exact timestamps aren't available
-   - Whenever you cite important information, include a reference to when it appears in the video
-
-Remember: the transcript contains the exact words spoken in the video and should be your primary source of information.
+5. When referencing specific content from the transcript, include a simple time reference in (~MM:SS) format if available.
 """
         response = await followup_model.generate_content_async(prompt)
         return response.text
@@ -427,7 +425,7 @@ async def generate_summary_endpoint(request: VideoRequest, req: Request):
 
 @app.post("/api/follow-up", response_class=JSONResponse)
 async def follow_up_questions(request: FollowUpRequest, req: Request):
-    """Handle follow-up Q&A based on previous conversation history and the original transcript."""
+    """Handle follow-up Q&A based on previous conversation history and the original transcript, title, and description."""
     try:
         check_rate_limit(req)
         logger.info(f"Received follow-up request with question: {request.question}")
@@ -438,7 +436,9 @@ async def follow_up_questions(request: FollowUpRequest, req: Request):
         response = await generate_followup_response(
             request.question, 
             formatted_convo,
-            request.transcript
+            request.transcript,
+            getattr(request, 'title', None),
+            getattr(request, 'description', None)
         )
         logger.info("Successfully generated follow-up response")
         return JSONResponse(content={"response": response})
