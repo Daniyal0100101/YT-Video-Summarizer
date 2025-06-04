@@ -3,6 +3,6 @@ uvicorn
 pydantic
 python-dotenv
 youtube-transcript-api
-pytube
+yt-dlp
 google-generativeai
 cachetools
