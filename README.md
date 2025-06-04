@@ -21,7 +21,7 @@ A fast, clean, and AI-powered web app that summarizes YouTube videos using Gemin
 | Frontend    | HTML, TailwindCSS, JavaScript |
 | Backend     | FastAPI (Python)             |
 | AI Model    | Gemini 2.0 Flash (Google AI) |
-| Video Tools | YouTubeTranscriptAPI, yt-dlp |
+| Video Tools | YouTubeTranscriptAPI, Pytube |
 | Deployment  | Optional: Render, Railway, etc. |
 
 ---
