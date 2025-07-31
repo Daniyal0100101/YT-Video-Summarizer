@@ -194,6 +194,18 @@ class VideoRequest(BaseModel):
             raise ValueError("Invalid YouTube URL format")
         return url
 
+class SummaryRequest(BaseModel):
+    youtube_url: HttpUrl = Field(..., description="Full YouTube video URL")
+    transcript: Optional[str] = Field(None, description="Video transcript text")
+
+    @validator('youtube_url')
+    def validate_youtube_url_summary(cls, url):
+        youtube_regex = r'^.*(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*'
+        match = re.search(youtube_regex, str(url))
+        if not match:
+            raise ValueError("Invalid YouTube URL format")
+        return url
+
 class ConversationMessage(BaseModel):
     role: str = Field(..., description="Role of the message sender (user/assistant)")
     content: str = Field(..., description="Content of the message")

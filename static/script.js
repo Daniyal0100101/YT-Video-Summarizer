@@ -64,6 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return marked.parse(text || '');
     };
 
+    // Extract YouTube video ID from a URL
+    const extractVideoId = (url) => {
+        const regex = /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/|.*[?&]v=))([A-Za-z0-9_-]{11})/;
+        const match = url.match(regex);
+        return match ? match[1] : null;
+    };
+
     // Initialize YouTube Player
     function initYouTubePlayer(videoId) {
         if (!videoId) return;
@@ -411,6 +418,25 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // API calls
+
+    // Fetch transcript via Invidious
+    const fetchTranscriptViaInvidious = async (videoId) => {
+        const url = `https://yewtu.be/api/v1/videos/${videoId}/transcripts?format=json`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch transcript: ${response.status}`);
+        }
+        const data = await response.json();
+        if (!Array.isArray(data)) {
+            throw new Error('Invalid transcript data');
+        }
+        return data.map(item => {
+            const start = item.start || 0;
+            const minutes = Math.floor(start / 60);
+            const seconds = Math.floor(start % 60).toString().padStart(2, '0');
+            return `[${minutes}:${seconds}] ${item.text}`;
+        }).join('\n');
+    };
     const fetchVideoData = async (url) => {
         try {
             console.log('Fetching video data for URL:', url);
@@ -437,13 +463,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const fetchSummary = async (url) => {
+    const fetchSummary = async (url, transcript) => {
         try {
             console.log('Fetching summary for URL:', url);
             const response = await fetch('/api/generate-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ youtube_url: url }),
+                body: JSON.stringify({ youtube_url: url, transcript }),
             });
             if (!response.ok) {
                 const text = await response.text();
@@ -585,6 +611,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         setLoading(true);
         try {
+<<<<<<< HEAD
             // Extract videoId from URL
             let videoId = null;
             const match = youtubeUrl.match(/(?:v=|youtu\.be\/|embed\/|\/v\/|\?vi=|\&v=)([\w-]{11})/);
@@ -594,6 +621,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 // fallback: try to extract 11-char ID
                 const idMatch = youtubeUrl.match(/([\w-]{11})/);
                 if (idMatch) videoId = idMatch[1];
+=======
+            const videoId = extractVideoId(youtubeUrl);
+            let transcript = null;
+            if (videoId) {
+                try {
+                    transcript = await fetchTranscriptViaInvidious(videoId);
+                } catch (err) {
+                    console.error('Invidious transcript fetch failed:', err);
+                    transcript = null;
+                }
+            }
+
+            const [videoData, summaryData] = await Promise.all([
+                fetchVideoData(youtubeUrl),
+                fetchSummary(youtubeUrl, transcript),
+            ]);
+
+            if (!videoData || typeof videoData !== 'object') {
+                throw new Error('Invalid video data received from server');
+>>>>>>> c42d2a9472f0d4addd6c76a8fee1cdd285e6fc98
             }
             let transcript = null;
             if (videoId) {
@@ -622,7 +669,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // Populate
             videoTitle.textContent = videoData.title || 'No title available';
             videoDescription.textContent = videoData.description || 'No description available';
+<<<<<<< HEAD
             videoTranscript.textContent = videoData.transcript || 'No transcript available';
+=======
+            videoTranscript.textContent = transcript || videoData.transcript || 'No transcript available';
+
+>>>>>>> c42d2a9472f0d4addd6c76a8fee1cdd285e6fc98
             // Render summary as HTML with proper markdown parsing
             const summaryMarkdown = summaryData.summary || 'No summary available';
             renderSummary(summaryMarkdown);
