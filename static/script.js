@@ -494,6 +494,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // Add fetchTranscriptViaInvidious to fetch transcript from Invidious
+    async function fetchTranscriptViaInvidious(videoId) {
+        const url = `https://yewtu.be/api/v1/videos/${videoId}/transcripts?format=json`;
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Invidious transcript fetch failed');
+            const data = await response.json();
+            if (!Array.isArray(data) || data.length === 0) throw new Error('No transcript data');
+            // Each item: {start, duration, text}
+            return data.map(item => {
+                const totalSeconds = Math.floor(item.start);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                const timestamp = `[${minutes}:${seconds.toString().padStart(2, '0')}]`;
+                return `${timestamp} ${item.text}`;
+            }).join('\n');
+        } catch (e) {
+            return null;
+        }
+    }
+
     // UI States
     const setLoading = (isLoading) => {
         if (isLoading) {
@@ -564,38 +585,55 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         setLoading(true);
         try {
-            const [videoData, summaryData] = await Promise.all([
-                fetchVideoData(youtubeUrl),
-                fetchSummary(youtubeUrl),
-            ]);
-
-            if (!videoData || typeof videoData !== 'object') {
-                throw new Error('Invalid video data received from server');
+            // Extract videoId from URL
+            let videoId = null;
+            const match = youtubeUrl.match(/(?:v=|youtu\.be\/|embed\/|\/v\/|\?vi=|\&v=)([\w-]{11})/);
+            if (match && match[1]) {
+                videoId = match[1];
+            } else {
+                // fallback: try to extract 11-char ID
+                const idMatch = youtubeUrl.match(/([\w-]{11})/);
+                if (idMatch) videoId = idMatch[1];
             }
-            if (!summaryData || typeof summaryData !== 'object') {
-                throw new Error('Invalid summary data received from server');
+            let transcript = null;
+            if (videoId) {
+                transcript = await fetchTranscriptViaInvidious(videoId);
             }
-
+            // Fetch video data (for title, description, etc.)
+            const videoData = await fetchVideoData(youtubeUrl);
+            // Fetch summary, passing transcript if available
+            const summaryData = await (async () => {
+                const response = await fetch('/api/generate-summary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ youtube_url: youtubeUrl, transcript }),
+                });
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(`Server error: ${response.status} - ${text}`);
+                }
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`Expected JSON, but received: ${text}`);
+                }
+                return await response.json();
+            })();
             // Populate
             videoTitle.textContent = videoData.title || 'No title available';
             videoDescription.textContent = videoData.description || 'No description available';
             videoTranscript.textContent = videoData.transcript || 'No transcript available';
-
             // Render summary as HTML with proper markdown parsing
             const summaryMarkdown = summaryData.summary || 'No summary available';
             renderSummary(summaryMarkdown);
-
             // Initialize YouTube player with the video ID
             initYouTubePlayer(videoData.video_id);
-
             videoDataContainer.classList.remove('hidden');
             playerSection.classList.remove('hidden');
             videoSummary.classList.remove('hidden');
-
             if (!videoSummary.contains(copySummaryBtn)) {
                 videoSummary.appendChild(copySummaryBtn);
             }
-
             enableFollowUp();
             conversationHistory = [];
             updateConversationDisplay();
