@@ -194,6 +194,18 @@ class VideoRequest(BaseModel):
             raise ValueError("Invalid YouTube URL format")
         return url
 
+class SummaryRequest(BaseModel):
+    youtube_url: HttpUrl = Field(..., description="Full YouTube video URL")
+    transcript: Optional[str] = Field(None, description="Video transcript text")
+
+    @validator('youtube_url')
+    def validate_youtube_url_summary(cls, url):
+        youtube_regex = r'^.*(?:youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*'
+        match = re.search(youtube_regex, str(url))
+        if not match:
+            raise ValueError("Invalid YouTube URL format")
+        return url
+
 class ConversationMessage(BaseModel):
     role: str = Field(..., description="Role of the message sender (user/assistant)")
     content: str = Field(..., description="Content of the message")
@@ -395,14 +407,16 @@ async def fetch_video_data(request: VideoRequest):
         )
 
 @app.post("/api/generate-summary", response_class=JSONResponse)
-async def generate_summary_endpoint(request: VideoRequest, req: Request):
+async def generate_summary_endpoint(request: SummaryRequest, req: Request):
     """Generate a summary for the given YouTube video using the Gemini model."""
     try:
         check_rate_limit(req)
         logger.info(f"Received generate-summary request for URL: {request.youtube_url}")
         youtube_url = str(request.youtube_url)
         video_id = extract_youtube_id(youtube_url)
-        transcript = await get_transcript(video_id)
+        transcript = request.transcript
+        if not transcript:
+            transcript = await get_transcript(video_id)
         if transcript.startswith("Transcript is not available"):
             return JSONResponse(content={"summary": transcript})
         summary = await generate_summary(transcript, video_id)
