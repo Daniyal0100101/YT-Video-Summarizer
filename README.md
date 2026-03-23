@@ -2,6 +2,10 @@
 
 A fast, clean, and AI-powered web app that summarizes YouTube videos using Gemini AI. Paste any link, get an instant summary, view the transcript, and ask smart follow-up questions.
 
+
+### 🚀 Key Achievements
+- **Optimized API reliability by implementing a 3-tier fallback mechanism for transcript extraction and reduced latency through a 200-item LRU cache, supporting up to 5 requests/minute per user with robust 15-20s timeout handling.**
+
 ---
 
 ## Features
